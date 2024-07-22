@@ -29,7 +29,7 @@ class Parser(object):
         parser.add_argument("--base-dir", type=str, default="model_base")
         parser.add_argument("--seed", type=int, default=0)
         parser.add_argument("--data", type=str, default="yelp",
-                            choices=["yelp", "sst", "cifar", "mnist"])
+                            choices=["yelp", "sst", "cifar", "mnist", "yahoo"])
         parser.add_argument("--use_tsv", action="store_true")
         parser.add_argument("--vocab_size", type=int, default=50000)
         parser.add_argument("--small", action="store_true")
@@ -194,11 +194,12 @@ def update_arguments(args):
         start, end = args.cpu_range.strip().split("-")
         args.num_processes = int(end) - int(start) + 1
 
-    if args.cpu:
+    if args.cpu and args.gpu != -1:
         args.device = "cpu"
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     else:
-        args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
+        args.device = torch.device(f"cuda" if torch.cuda.is_available() else "cpu")
 
     if args.diffai:
         args.keep_intermediate_zonotopes = True

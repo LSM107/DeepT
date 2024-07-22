@@ -13,9 +13,30 @@ from multiprocessing import Pool
 
 import numpy as np
 import torch
+import re
 
 if not os.path.exists("tmp"): os.mkdir("tmp")
 
+def sentence_to_words(sentence):
+    
+    tokens = re.findall(r"\b\w+\b|[.,!?;]", sentence)
+    return tokens
+
+def load_data_yahoo(data_path):
+
+    df = pandas.read_csv(data_path, header=None)
+
+    inputs = df.iloc[:, 1:].apply(lambda x: ' '.join(x.dropna().astype(str)), axis=1).values
+    labels = df.iloc[:, 0].values
+
+    data = []
+
+    for i in range(len(inputs)):
+
+        words = sentence_to_words(inputs[i])
+        data.append({'label': labels[i] - 1, 'sent_a': words})
+
+    return data
 
 def tokenize(sent):
     return nltk.word_tokenize(sent)
@@ -106,6 +127,14 @@ def load_data_raw(args, set):
 
 
 def load_data(args):
+    if args.data == 'yahoo':
+        data_train = []
+        data_valid = []
+        data_test = load_data_yahoo("yahoo_dataset.csv")
+        vocab_char = None
+        vocab_word = None
+        return data_train, data_valid, data_test, vocab_char, vocab_word
+
     if args.small:
         path = "tmp/data_%s_small.pkl.gz" % args.data
         path_no_train = "tmp/data_%s_no_train_small.pkl.gz" % args.data
