@@ -25,6 +25,8 @@ import torch
 from pytorch_pretrained_bert.file_utils import WEIGHTS_NAME, CONFIG_NAME
 from pytorch_pretrained_bert.optimization import BertAdam
 from pytorch_pretrained_bert.tokenization import BertTokenizer
+from transformers import BertTokenizer as HuggingFaceBertTokenizer
+from transformers import AutoModelForSequenceClassification
 from torch.nn import CrossEntropyLoss
 from typing import List, Mapping
 
@@ -38,6 +40,10 @@ class BERT:
         self._build_trainer()
 
     def general_init(self, args, data_train):
+
+        self.pretrained_model = AutoModelForSequenceClassification.from_pretrained("fabriceyhc/bert-base-uncased-yahoo_answers_topics")
+        self.pretrained_tokenizer = HuggingFaceBertTokenizer.from_pretrained("bert-base-uncased")
+
         self.args = args
         self.max_seq_length = args.max_sent_length
         self.do_lower_case = True

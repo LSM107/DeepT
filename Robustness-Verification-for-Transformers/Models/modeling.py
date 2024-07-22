@@ -185,6 +185,33 @@ class BertSelfAttention(nn.Module):
 
         return context_layer, attention_scores, attention_probs
 
+    def prune_heads(self, heads):
+        mask = torch.ones(self.num_attention_heads, self.attention_head_size, device=self.query.weight.device)
+        for head in heads:
+            mask[head] = 0
+        mask = mask.view(-1).contiguous().eq(1)
+
+        def prune_linear_layer(layer, index, dim=0):
+            index = index.nonzero().squeeze()
+            index = index.to(layer.weight.device)
+            new_weight = layer.weight.index_select(dim, index).detach()
+            if layer.bias is not None:
+                new_bias = layer.bias.detach().clone()
+                new_bias = new_bias[index] if dim == 0 else new_bias
+            else:
+                new_bias = None
+            new_layer = nn.Linear(new_weight.size(1), new_weight.size(0), bias=new_bias is not None).to(layer.weight.device)
+            new_layer.weight.data = new_weight
+            if new_bias is not None:
+                new_layer.bias.data = new_bias
+            return new_layer
+
+        self.query = prune_linear_layer(self.query, mask)
+        self.key = prune_linear_layer(self.key, mask)
+        self.value = prune_linear_layer(self.value, mask)
+
+        self.num_attention_heads -= len(heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
 
 class BertSelfOutput(nn.Module):
     def __init__(self, config):
@@ -213,6 +240,33 @@ class BertSelfOutput(nn.Module):
 
         return hidden_states
 
+    def prune_dense_layer(self, head_indices):
+        """
+        Prunes the dense layer weights and biases based on the given head indices.
+
+        Args:
+            head_indices (list of int): Indices of the heads to be pruned.
+        """
+        head_size = self.config.hidden_size // self.config.num_attention_heads
+        
+        # Calculate the indices to keep
+        all_indices = list(range(self.config.hidden_size))
+        indices_to_prune = []
+        for head in head_indices:
+            start_index = head * head_size
+            end_index = start_index + head_size
+            indices_to_prune.extend(range(start_index, end_index))
+        
+        indices_to_keep = [idx for idx in all_indices if idx not in indices_to_prune]
+        indices_to_keep = torch.tensor(indices_to_keep, device=self.dense.weight.device)
+        
+        # Prune the weights and biases
+        self.dense.weight.data = self.dense.weight.index_select(1, indices_to_keep).detach()
+        self.dense.in_features = len(indices_to_keep)
+        
+        if self.dense.bias is not None:
+            self.dense.bias.data = self.dense.bias.detach()
+
 
 class BertAttention(nn.Module):
     def __init__(self, config):
@@ -226,6 +280,15 @@ class BertAttention(nn.Module):
 
         return attention_output, self_output, attention_scores, attention_probs
 
+    def prune_heads(self, heads):
+        """
+        Prunes heads in both self attention and output dense layer.
+        
+        Args:
+            heads (list of int): Indices of the heads to be pruned.
+        """
+        self.self.prune_heads(heads)
+        self.output.prune_dense_layer(heads)
 
 class BertIntermediate(nn.Module):
     def __init__(self, config):
